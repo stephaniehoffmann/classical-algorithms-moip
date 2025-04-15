@@ -5,7 +5,11 @@ and includes code for classical MOIP algorithms accompanying the paper [Quantum 
 by Ayse Kotil, Elijah Pelofske, Stephanie Riedmüller, Daniel J. Egger, Stephan Eidenbenz, Thorsten Koch, and Stefan Woerner.
 
 Both algorithms are written in C++ using the commercial solver CPLEX. 
-Please follow the installation information given in the corresponding readme files.
+They need to be compiled by running
+`
+make
+`
+in the folders `dpa` and `dmc`. For further information, please consult the corresponding readme files.
 
 
 ## DCM
