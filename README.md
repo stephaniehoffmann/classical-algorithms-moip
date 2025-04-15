@@ -9,7 +9,7 @@ They need to be compiled by running
 `
 make
 `
-in the folders `dpa` and `dmc`. For further information, please consult the corresponding readme files.
+in the folders `dpa` and `dmc`. Make sure to set the CPLEX_DIRECTORY. For further information, please consult the corresponding readme files.
 
 
 ## DCM
@@ -59,6 +59,7 @@ European Journal of Operational Research 260, 904–919
 This project is a modified version of the implementation of the [DPA algorithm by Kerstin Dächert](https://github.com/kerstindaechert/DefiningPointAlgorithm).
 
 Modifications made in this repository:
+- Exclusive inclusion of folders necessary for compilation in Linux
 - Deletion of unused algorithmic options from main
 - Output path and timeout as additional argument for the main
 - Modified output data to include 
