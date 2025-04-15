@@ -60,7 +60,7 @@ Modifications made in this repository:
 - Modified output data to include 
   - the time of each found solution
   - the total solving time
-  - the solution in the decision space
+  - the found solutions in the decision space.
 
 Please note that I am not the original author of the algorithm or its initial implementation.
 Credit for the original work goes to the respective authors and contributors.
