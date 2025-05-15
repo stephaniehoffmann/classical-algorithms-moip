@@ -53,9 +53,11 @@ private:
 
 	bool ComputeGlobalBounds();
 	void InitListOfBoxes();
-	int  ComputeNondominatedSet(bool useEconstraint, bool augmented, int indexEc, double timeout);
-	
-	int  SelectBoxToRefine(bool useEconstraint, int indexEc);
+	int  ComputeNondominatedSet(bool useEconstraint, bool augmented, int indexEc);
+    void WarmStart(bool useEconstraint, bool augmented, int indexEc, vector<vector<int>>& points);
+
+
+    int  SelectBoxToRefine(bool useEconstraint, int indexEc);
 
 	// methods related to scalarization
 	bool Solve(bool augmented, int indexEc, const int* rhs, int* obj);
@@ -69,6 +71,7 @@ private:
 
 	// methods related to box management 
 	void UpdateListOfBoxes(int indexEc, const int* obj, bool useEconstraint, int indexSelectedBox);
+	void UpdateListOfBoxesWarmstart(int indexEc, const int* obj, bool useEconstraint);
 	deque<int> FindBoxesToBeUpdated(const int* obj);
 	bool IsContainedInBox(const int* obj, int index);
 	bool AtBoundaryOfBox(const int* obj, int index);
@@ -81,15 +84,22 @@ private:
 	void DestructBoxesStructure();
 	void DestructListNondominatedPoints();
 
+    bool isOptimalForObjective(const int* obj, int objectiveIndex, int indexSelectedBox);
+
 public:
 	int numObjectives=0;
-    int solutionTime;
+    double solutionTime;
+    double startTime = 0;
+    double currentTime = 0;
+    double solverTime = 0;
+    double timeout;
 	bool isSenseMaximum = false;
 	DefiningPoint(bool verbose);
 	~DefiningPoint(void);
 	void ImportProblemSpecification(const char* fileName);
-	void Compute(bool useEconstraint, bool augmented, int indexEc, double timeout);
+	void Compute(bool useEconstraint, bool augmented, int indexEc, vector<vector<int>>& points);
 	void ExportNonDominatedPointsToFile(const std::string fileName);
+    vector<vector<int>> ReadPointsFromFile(const string& filename);
 };
 
 

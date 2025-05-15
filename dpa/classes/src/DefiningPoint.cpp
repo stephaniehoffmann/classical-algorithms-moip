@@ -1,6 +1,7 @@
 #include "../include/DefiningPoint.h"
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string.h>
 #include <numeric>
 #include <map>
@@ -247,7 +248,7 @@ bool DefiningPoint::ComputeGlobalBounds() {
 }
 
 // Main method
-void DefiningPoint::Compute(bool useEconstraint, bool augmented, int indexEc, double timeout) {
+void DefiningPoint::Compute(bool useEconstraint, bool augmented, int indexEc, vector<vector<int>>& points) {
 	// useEconstraint: true for using e-constraint, false: placeholder for other scalarization, currently unused
 // augmented: true for augmented objective function, false for two-stage optimization
 // indexEC: chooses objective function of the e-constraint model; valid indices: 0, ..., numObjectives-1
@@ -257,7 +258,10 @@ void DefiningPoint::Compute(bool useEconstraint, bool augmented, int indexEc, do
 	if (!ComputeGlobalBounds()) throw std::domain_error("Model has no feasible solution");
 
 	InitListOfBoxes();
-	int numInterations = ComputeNondominatedSet(useEconstraint, augmented, indexEc, timeout);
+    if (points.size() > 0){
+        WarmStart(useEconstraint, augmented, indexEc, points);
+    }
+	int numInterations = ComputeNondominatedSet(useEconstraint, augmented, indexEc);
 	LogResults(numInterations);
 }
 
@@ -271,10 +275,9 @@ void DefiningPoint::InitListOfBoxes() {
 	}
 }
 
-int DefiningPoint::ComputeNondominatedSet(bool useEconstraint, bool augmented, int indexEc, double timeout) {
+int DefiningPoint::ComputeNondominatedSet(bool useEconstraint, bool augmented, int indexEc) {
 
-    auto start = std::chrono::high_resolution_clock::now();
-    auto start_time = std::chrono::duration<double>(start.time_since_epoch()).count();
+    cout << "ComputeNondominatedSet" << endl;
 
 	assert(indexEc <= numObjectives);
 
@@ -284,13 +287,14 @@ int DefiningPoint::ComputeNondominatedSet(bool useEconstraint, bool augmented, i
 
 	if (augmented)
 		ConstructAugmentedObj(indexEc);
-
-    auto current = std::chrono::high_resolution_clock::now();
-    auto current_time = std::chrono::duration<double>(current.time_since_epoch()).count();
-    auto duration = current_time - start_time;
+    int i = 0;
 	// main loop: while list of boxes is not empty
-	while (boxes.size() != 0 and duration <= timeout) {
-
+	while (boxes.size() != 0 and currentTime - startTime <= timeout) {
+        cout << boxes.size() << " ";
+        if (i % 20 == 0){
+            cout << endl;
+        }
+        i++;
 
 		int indexSelectedBox = SelectBoxToRefine(useEconstraint, indexEc);
 
@@ -299,9 +303,8 @@ int DefiningPoint::ComputeNondominatedSet(bool useEconstraint, bool augmented, i
 			rhs[j] = boxes[indexSelectedBox]->u[j];
 		}
 		bool isFeasible = Solve(augmented, indexEc, rhs, obj);
-        current = std::chrono::high_resolution_clock::now();
-        current_time = std::chrono::duration<double>(current.time_since_epoch()).count();
-        duration = current_time - start_time;
+
+        currentTime = chrono::duration<double>((chrono::high_resolution_clock::now()).time_since_epoch()).count();
 
 		if (isFeasible == true) {
 			AppendNewNondomPoint(obj);
@@ -310,18 +313,51 @@ int DefiningPoint::ComputeNondominatedSet(bool useEconstraint, bool augmented, i
             IloNumArray x(env);
             cplex.getValues(x, variables);
             solutions.push_back(x);
-            progress.push_back(duration);
+            progress.push_back(currentTime - startTime);
 		}
 		else
 			boxes.erase(boxes.cbegin() + indexSelectedBox);
 		numIterations++;
 		if (verbose) std::cout << "Iteration :" << numIterations << endl;
 
-
 	}
 	delete[] obj;
 	delete[] rhs;
 	return numIterations;
+}
+
+
+void DefiningPoint::WarmStart(bool useEconstraint, bool augmented, int indexEc, vector<vector<int>>& points) {
+
+    cout << "Warmstarting" << endl;
+
+    // set factor to -1 for constraints, if sense is maximize
+    int factor = 1;
+    if (isSenseMaximum)
+        factor = -1;
+
+    assert(indexEc <= numObjectives);
+
+    for (size_t i = 0; i < points.size() and boxes.size() > 0; i++) {
+        cout << boxes.size() << " ";
+        if (i % 20 == 0){
+            cout << endl;
+        }
+        for (int k = 0; k <points[i].size(); k++){
+            points[i][k] = factor * points[i][k];
+
+        }
+
+        int* obj = points[i].data();
+
+        AppendNewNondomPoint(obj);
+        currentTime = chrono::duration<double>((chrono::high_resolution_clock::now()).time_since_epoch()).count();
+        progress.push_back(currentTime - startTime);
+
+        UpdateListOfBoxesWarmstart(indexEc, obj, useEconstraint);
+    }
+
+    return;
 }
 
 int DefiningPoint::SelectBoxToRefine(bool useEconstraint, int indexEc) {
@@ -363,7 +399,11 @@ bool DefiningPoint::SolveAugmentedEconstraint(int indexEc, const int* rhs, int* 
 
 	objectiveFunction.setExpr(augmentedObjectiveFunction);
 	numCallsToCplex = numCallsToCplex + 1;
-	cplex.solve();
+
+    double start = chrono::duration<double>((chrono::high_resolution_clock::now()).time_since_epoch()).count();
+    cplex.solve();
+    double stop = chrono::duration<double>((chrono::high_resolution_clock::now()).time_since_epoch()).count();
+    solverTime = solverTime + (stop - start);
 
 	// solve model and check the feasibility of the model
 	if (cplex.getCplexStatus() == IloCplex::Infeasible) {
@@ -474,6 +514,85 @@ void DefiningPoint::UpdateListOfBoxes(int indexEc, const int* obj, bool useEcons
 	}
 	RemoveOldBoxesFromList();
 	indexList.clear();
+}
+
+void DefiningPoint::UpdateListOfBoxesWarmstart(int indexEc, const int* obj, bool useEconstraint) {
+
+    indexList = FindBoxesToBeUpdated(obj);
+    for (int i = 0; i < indexList.size(); i++) {
+        int index = indexList.at(i);
+        for (int j = 0; j < numObjectives; j++) {
+            int zmax = ComputeSplitCriterion(index, j);
+            if (obj[j] > zmax + 0.5) {
+                CreateNewBox(obj, index, j, numObjectives);
+            }
+        }
+    }
+    RemoveOldBoxesFromList();
+    indexList.clear();
+}
+
+/*
+void DefiningPoint::UpdateListOfBoxesWarmstart(int indexEc, const int* obj, bool useEconstraint) {
+
+
+    indexList = FindBoxesToBeUpdated(obj);
+    for (int i = 0; i < indexList.size(); i++) {
+        int index = indexList.at(i);
+
+        bool foundOptimalIndex = false;
+
+        for (int j = 0; j < numObjectives; j++) {
+            int zmax = ComputeSplitCriterion(index, j);
+            if (obj[j] > zmax + 0.5) {
+                CreateNewBox(obj, index, j, numObjectives);
+                if (!foundOptimalIndex) {
+                    if (isOptimalForObjective(obj, j, index)){
+                        foundOptimalIndex = true;
+                        cout << " pop ";
+                        boxes.pop_back();
+                    }
+                }
+            }
+        }
+    }
+    RemoveOldBoxesFromList();
+    indexList.clear();
+}
+ */
+
+bool DefiningPoint::isOptimalForObjective(const int* obj, int objectiveIndex, int indexSelectedBox) {
+
+    int* rhs = new int[numObjectives];
+    // get rhs and solve model
+    for (int j = 0; j < numObjectives; j++) {
+        rhs[j] = boxes[indexSelectedBox]->u[j];
+    }
+    for (int j = 0; j < numObjectives; j++) {
+        if (j == objectiveIndex) {
+            rangeForObjectiveFunction[j].setUB(globalUpperBound[j]);
+        }
+        else {
+            rangeForObjectiveFunction[j].setUB(rhs[j] - 1);
+        }
+    }
+
+    objectiveFunction.setExpr(objectives[objectiveIndex]);
+
+    delete[] rhs;
+
+    cplex.solve();
+    numCallsToCplex = numCallsToCplex + 1;
+    if (cplex.getCplexStatus() == IloCplex::Infeasible) {
+        return false;
+    }
+
+    double val = cplex.getValue(objectives[objectiveIndex]) + 0.5;
+    if (obj[objectiveIndex] > (int)floor(val)) {
+        return false;
+    }
+
+    return true;
 }
 
 deque<int> DefiningPoint::FindBoxesToBeUpdated(const int* obj) {
@@ -622,8 +741,9 @@ void DefiningPoint::ExportNonDominatedPointsToFile(const std::string fileName) {
 	outputFile << std::setw(width) << std::setprecision(precision) << std::fixed;
 	outputFile << setOfNondominatedSolutions.size() << " Solutions found" << std::endl;
     outputFile << std::setw(width) << std::setprecision(precision) << std::fixed;
-    outputFile << solutionTime << " seconds" << std::endl;
-
+    outputFile << solutionTime << " seconds total time" << std::endl;
+    outputFile << std::setw(width) << std::setprecision(precision) << std::fixed;
+    outputFile << solverTime << " seconds solver time" << std::endl;
 	if (verbose) std::cout << "Saved file :" << fileName << endl;
 	outputFile.close();
 
@@ -640,6 +760,31 @@ void DefiningPoint::ExportNonDominatedPointsToFile(const std::string fileName) {
         outputX << solutions[i] << endl;
     }
     outputX.close();
-    cout << solutions.size() << endl;
+    cout << "Solutions found by solver: " << solutions.size() << endl;
 
+}
+
+vector<vector<int>> DefiningPoint::ReadPointsFromFile(const string& filename) {
+    ifstream file(filename);
+    vector<vector<int>> points;
+
+    if (!file.is_open()) {
+        cerr << "Error opening file: " << filename << std::endl;
+        return points;
+    }
+
+    string line;
+    while (getline(file, line)) {
+        stringstream ss(line);
+        vector<int> point;
+        int value;
+        while (ss >> value) {
+            point.push_back(value);
+        }
+        if (!point.empty()) {
+            points.push_back(point);
+        }
+    }
+    file.close();
+    return points;
 }

@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
 
 	const char* fileName = GetFileName(argv[1]);
     const char* output = GetFileName(argv[3]);
-    const double timeout = atoi(GetFileName(argv[4]));
+    const char* warmstart = GetFileName(argv[5]);
 	bool augmented = false;
 	bool verbose = false;
 
@@ -41,17 +41,17 @@ int main(int argc, char** argv) {
 	if (argc > 2 && strcmp(argv[2], "-a") == 0)
 		augmented = true;
 
-
 	DefiningPoint df = DefiningPoint(verbose);
 	try {
+        vector<vector<int>> points = df.ReadPointsFromFile(warmstart);
 		df.ImportProblemSpecification(fileName);
+        df.timeout = atoi(GetFileName(argv[4]));
 
         std::cout << "num objectives: " << df.numObjectives << std::endl;
-        auto start = std::chrono::high_resolution_clock::now();
-		df.Compute(true, augmented, df.numObjectives - 1, timeout);
-        auto stop = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::seconds>(stop - start);
-        df.solutionTime = duration.count();
+        df.startTime = chrono::duration<double>((chrono::high_resolution_clock::now()).time_since_epoch()).count();
+		df.Compute(true, augmented, df.numObjectives - 1, points);
+        df.currentTime = chrono::duration<double>((chrono::high_resolution_clock::now()).time_since_epoch()).count();
+        df.solutionTime = df.currentTime - df.startTime;
 
 		std::string resultFileName(output);
 		df.ExportNonDominatedPointsToFile(resultFileName);
