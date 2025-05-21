@@ -532,69 +532,6 @@ void DefiningPoint::UpdateListOfBoxesWarmstart(int indexEc, const int* obj, bool
     indexList.clear();
 }
 
-/*
-void DefiningPoint::UpdateListOfBoxesWarmstart(int indexEc, const int* obj, bool useEconstraint) {
-
-
-    indexList = FindBoxesToBeUpdated(obj);
-    for (int i = 0; i < indexList.size(); i++) {
-        int index = indexList.at(i);
-
-        bool foundOptimalIndex = false;
-
-        for (int j = 0; j < numObjectives; j++) {
-            int zmax = ComputeSplitCriterion(index, j);
-            if (obj[j] > zmax + 0.5) {
-                CreateNewBox(obj, index, j, numObjectives);
-                if (!foundOptimalIndex) {
-                    if (isOptimalForObjective(obj, j, index)){
-                        foundOptimalIndex = true;
-                        cout << " pop ";
-                        boxes.pop_back();
-                    }
-                }
-            }
-        }
-    }
-    RemoveOldBoxesFromList();
-    indexList.clear();
-}
- */
-
-bool DefiningPoint::isOptimalForObjective(const int* obj, int objectiveIndex, int indexSelectedBox) {
-
-    int* rhs = new int[numObjectives];
-    // get rhs and solve model
-    for (int j = 0; j < numObjectives; j++) {
-        rhs[j] = boxes[indexSelectedBox]->u[j];
-    }
-    for (int j = 0; j < numObjectives; j++) {
-        if (j == objectiveIndex) {
-            rangeForObjectiveFunction[j].setUB(globalUpperBound[j]);
-        }
-        else {
-            rangeForObjectiveFunction[j].setUB(rhs[j] - 1);
-        }
-    }
-
-    objectiveFunction.setExpr(objectives[objectiveIndex]);
-
-    delete[] rhs;
-
-    cplex.solve();
-    numCallsToCplex = numCallsToCplex + 1;
-    if (cplex.getCplexStatus() == IloCplex::Infeasible) {
-        return false;
-    }
-
-    double val = cplex.getValue(objectives[objectiveIndex]) + 0.5;
-    if (obj[objectiveIndex] > (int)floor(val)) {
-        return false;
-    }
-
-    return true;
-}
-
 deque<int> DefiningPoint::FindBoxesToBeUpdated(const int* obj) {
 
 	for (int i = 0; i < (int)boxes.size(); i++) {

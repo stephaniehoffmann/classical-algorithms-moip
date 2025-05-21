@@ -84,8 +84,6 @@ private:
 	void DestructBoxesStructure();
 	void DestructListNondominatedPoints();
 
-    bool isOptimalForObjective(const int* obj, int objectiveIndex, int indexSelectedBox);
-
 public:
 	int numObjectives=0;
     double solutionTime;
